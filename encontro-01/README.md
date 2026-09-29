@@ -1,7 +1,7 @@
 # Encontro 1 · Do workflow ao agente
 
 **Hands-on 1: um problema, três arquiteturas**
-Em dupla · 50 minutos · 1:10–2:00 da aula
+Em grupos
 
 ---
 
