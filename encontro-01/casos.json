@@ -1,0 +1,62 @@
+[
+  {
+    "id": "c01",
+    "tipo": "direta",
+    "pergunta": "Quantos dias por semana posso trabalhar de casa?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["rh-trabalho-remoto"]}
+  },
+  {
+    "id": "c02",
+    "tipo": "direta",
+    "pergunta": "Errei a senha várias vezes e minha conta bloqueou. O que eu faço?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["ti-senhas-e-acesso"]}
+  },
+  {
+    "id": "c03",
+    "tipo": "direta",
+    "pergunta": "Até quando posso incluir meu recém-nascido no plano de saúde?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["beneficios-plano-de-saude"]}
+  },
+  {
+    "id": "c04",
+    "tipo": "direta",
+    "pergunta": "Posso dividir minhas férias em mais de um período?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["rh-ferias"]}
+  },
+  {
+    "id": "c05",
+    "tipo": "ambigua",
+    "pergunta": "Meu notebook da empresa caiu e quebrou aqui em casa. O seguro cobre ou vou ter que pagar?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["ti-equipamentos"]}
+  },
+  {
+    "id": "c06",
+    "tipo": "ambigua",
+    "pergunta": "Estou trabalhando de casa hoje e não consigo abrir o sistema de ponto. O que eu faço?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["ti-vpn-e-acesso-remoto"]}
+  },
+  {
+    "id": "c07",
+    "tipo": "conflito",
+    "pergunta": "Qual é o valor do vale-refeição por dia?",
+    "esperado": {"desfecho": "nao_sei", "fontes_obrigatorias": ["beneficios-vale-refeicao", "rh-guia-de-integracao"]}
+  },
+  {
+    "id": "c08",
+    "tipo": "fora_do_corpus",
+    "pergunta": "Qual é a política de estacionamento do escritório?",
+    "esperado": {"desfecho": "nao_sei", "fontes_obrigatorias": []}
+  },
+  {
+    "id": "c09",
+    "tipo": "elegibilidade",
+    "pergunta": "Tenho um filho de 4 anos. Tenho direito ao auxílio-creche?",
+    "esperado": {"desfecho": "escalar", "fontes_obrigatorias": []}
+  },
+  {
+    "id": "c10",
+    "tipo": "multi_passo",
+    "pergunta": "Vou sair de licença-paternidade mês que vem. Quantos dias eu tenho, e preciso fazer alguma coisa para colocar o bebê no plano de saúde?",
+    "esperado": {"desfecho": "responder", "fontes_obrigatorias": ["rh-licencas", "beneficios-plano-de-saude"]}
+  }
+]
