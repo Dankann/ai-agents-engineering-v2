@@ -273,10 +273,6 @@ class PlanilhaGoogle:
     Como na API real: devolve uma lista de linhas, cada linha uma lista de células,
     todas como TEXTO. A primeira linha é o cabeçalho. Nenhum filtro, nenhum tipo,
     nenhuma limpeza: quem lê é que interpreta.
-
-    Modo planilha real (demo do professor): com PLANILHA_REAL=1, a mesma chamada lê
-    uma planilha de verdade no Google Sheets (veja professor/encontro-02/planilha_real.py).
-    Quem usa esta classe não muda nada: é a Anticorruption Layer trocando o sistema.
     """
 
     def __init__(self):
