@@ -39,7 +39,19 @@ flowchart LR
 
 | arquitetura | acertos | rota certa | chamadas/caso | tokens/caso | custo total (US$) | custo/acerto (US$) | seg/caso |
 |---|---|---|---|---|---|---|---|
-|  |  |  |  |  |  |  |  |
+| agente único (Aula 3) | 16/19 | 17/17 | 2.6 | 3007 | 0.0655 | 0.00409 | 2.7 |
+| roteador llm · 3 esp · original · incerto→segue | 16/19 | 14/17 | 3.1 | 2588 | 0.0599 | 0.00375 | 3.2 |
+| roteador llm · 4 esp · original · incerto→segue | 16/19 | 14/17 | 3.1 | 2576 | 0.06 | 0.00375 | 3.3 |
+| roteador llm · 3 esp · resumo · incerto→segue | 16/19 | 14/17 | 3.1 | 2581 | 0.0598 | 0.00374 | 3.1 |
+| roteador llm · 4 esp · resumo · incerto→segue | 16/19 | 14/17 | 3.5 | 3230 | 0.0729 | 0.00455 | 3.5 |
+| roteador llm · 4 esp · resumo · incerto→único | 15/19 | 14/17 | 3.8 | 3947 | 0.0869 | 0.00579 | 3.7 |
+| roteador llm · 3 esp · resumo · incerto→único | 15/19 | 14/17 | 3.5 | 3291 | 0.074 | 0.00493 | 3.4 |
+| roteador regra · 3 esp · original · incerto→único | 15/19 | 16/17 | 2.6 | 3081 | 0.0669 | 0.00446 | 2.6 |
+| roteador regra · 4 esp · original · incerto→único | 15/19 | 16/17 | 2.6 | 3059 | 0.0667 | 0.00444 | 2.7 |
+| roteador regra · 3 esp · original · incerto→segue | 16/19 | 14/17 | 2.0 | 2279 | 0.0506 | 0.00316 | 2.1 |
+| supervisor · 3 esp | 17/19 | 15/17 | 3.9 | 3370 | 0.079 | 0.00465 | 4.2 |
+| **⭐ roteador regra · 4 esp · original · incerto→segue** | **17/19** | 15/17 | **1.7** | **1360** | **0.0326** | **0.00192** | **1.9** |
+| supervisor · 4 esp | 16/19 | 14/17 | 4.4 | 4218 | 0.0957 | 0.00598 | 4.7 |
 
 ## 4. A divisão se paga?
 
