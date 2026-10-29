@@ -312,8 +312,20 @@ def _para_openai(mensagens: list, sistema: str) -> list:
     return saida
 
 
+# Parâmetros extras do pedido, por modelo (ex.: {"reasoning_effort": "low"} para modelos de raciocínio).
+EXTRA: dict = {}
+# Modelos de raciocínio (GPT-5 em diante, série o) recusam max_tokens e pedem max_completion_tokens, que conta
+# também os tokens de raciocínio. Descoberto na primeira recusa e lembrado por modelo.
+_LIMITE_NOVO: set = set()
+RESERVA_RACIOCINIO = int(os.getenv("RESERVA_RACIOCINIO", "4000"))
+
+
 def _pedido_openai(mensagens, sistema, ferramentas, max_tokens, exigir_ferramenta=False) -> dict:
-    pedido = {"model": MODELO, "max_tokens": max_tokens, "messages": _para_openai(mensagens, sistema)}
+    pedido = {"model": MODELO, "messages": _para_openai(mensagens, sistema)}
+    if MODELO in _LIMITE_NOVO:
+        pedido["max_completion_tokens"] = max_tokens + RESERVA_RACIOCINIO
+    else:
+        pedido["max_tokens"] = max_tokens
     if ferramentas:
         pedido["tools"] = [{"type": "function", "function": {"name": f["nome"], "description": f["descricao"],
                                                              "parameters": f["parametros"]}}
@@ -337,6 +349,7 @@ def _pedido_openai(mensagens, sistema, ferramentas, max_tokens, exigir_ferrament
             # ignorar a ferramenta exigida e o agente quebra o contrato de saída.
             preferencias["require_parameters"] = True
         pedido["provider"] = preferencias
+    pedido.update(EXTRA)
     return pedido
 
 
@@ -367,7 +380,7 @@ def _chamar_openai_compat(mensagens, sistema, ferramentas, max_tokens, exigir_fe
         raise RuntimeError("PROVEDOR=openai_compat precisa de BASE_URL e API_KEY no .env")
     corpo = json.dumps(_pedido_openai(mensagens, sistema, ferramentas, max_tokens, exigir_ferramenta)).encode()
     inicio = time.perf_counter()
-    for tentativa in range(4):           # limite de taxa e instabilidade passageira: espera e tenta de novo
+    for tentativa in range(5):           # limite de taxa e instabilidade passageira: espera e tenta de novo
         pedido = urllib.request.Request(f"{base}/chat/completions", data=corpo, method="POST",
                                         headers={"Authorization": f"Bearer {chave}",
                                                  "Content-Type": "application/json"})
@@ -378,7 +391,13 @@ def _chamar_openai_compat(mensagens, sistema, ferramentas, max_tokens, exigir_fe
                 break
             erro = RuntimeError(f"{base} respondeu sem 'choices': {str(dados)[:500]}")
         except urllib.error.HTTPError as e:
-            erro = RuntimeError(f"{base} respondeu {e.code}: {e.read().decode()[:500]}")
+            texto = e.read().decode()
+            erro = RuntimeError(f"{base} respondeu {e.code}: {texto[:500]}")
+            if e.code == 400 and "max_completion_tokens" in texto and MODELO not in _LIMITE_NOVO:
+                _LIMITE_NOVO.add(MODELO)     # modelo de raciocínio: refaz o pedido com o parâmetro novo
+                corpo = json.dumps(_pedido_openai(mensagens, sistema, ferramentas, max_tokens,
+                                                  exigir_ferramenta)).encode()
+                continue
             if e.code not in (429, 500, 502, 503, 504):
                 raise erro from None
         except (urllib.error.URLError, TimeoutError) as e:
