@@ -22,17 +22,22 @@
 
 Golden set da turma (25 casos) mais o do grupo (8), 5 amostras de cada.
 
+> Pendente: estes números saíram de uma rodada com 26 casos (os 25 da turma e só o B16 do grupo). Refazer o
+> placar depois que os 8 casos do grupo estiverem escritos.
+
 | versão | acerto (IC 90%) | pass^5 | instáveis | US$/acerto | p95 (s) | loops |
 |---|---|---|---|---|---|---|
-| v1 · produção | | | | | | |
-| v2 · prompt enxuto (PR #42) | | | | | | |
-| v3 · modelo mais barato | | | | | | |
+| v1 · produção | 79% (68%–89%) | 65% | 8/26 | 0.00068 | 9.5 | 10% |
+| v2 · prompt enxuto (PR #42) | 76% (62%–88%) | 73% | 2/26 | 0.00041 | 4.9 | 0% |
+| v3 · modelo mais barato | 97% (92%–100%) | 92% | 2/26 | 0.00023 | 4.5 | 0% |
 
 ## 3 · Regressão ou ruído
 
-- **Ruído (teste A/A da v1):** o acerto variou até ___ pontos entre duas rodadas da mesma versão.
-- **PR #42:** diferença de ___ (IC 90%: ___ a ___). Veredito: ___. Casos que mudaram: ___.
-- **Modelo barato:** diferença de ___ (IC 90%: ___ a ___). Veredito: ___. Casos que mudaram: ___.
+Também calculado com 26 casos, a refazer com os 8 do grupo.
+
+- **Ruído (teste A/A da v1):** o acerto variou até 4 pontos entre duas rodadas da mesma versão.
+- **PR #42:** diferença de -3% (IC 90%: -10% a +4%). Veredito: não dá para afirmar. Casos que mudaram: pioraram P1, R1 e G5; melhorou C2.
+- **Modelo barato:** diferença de +18% (IC 90%: +6% a +30%). Veredito: melhora. Casos que mudaram: piorou N1; melhoraram S1, S2, P1, R1, R2, G5 e G6.
 
 **Os casos do grupo mudaram alguma conclusão?** (uma ou duas frases)
 

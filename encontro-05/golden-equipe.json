@@ -1,0 +1,16 @@
+[
+ {
+  "id": "B16",
+  "categoria": "do grupo",
+  "pergunta": "Qual o valor do auxílio-creche?",
+  "esperado": {
+   "desfecho": "responder",
+   "fontes_obrigatorias": [
+    "beneficios-auxilio-creche"
+   ]
+  },
+  "resposta_contem_algum": [
+   "600"
+  ]
+ }
+]
