@@ -56,14 +56,16 @@ As seis ferramentas estão implementadas: os contratos de `consultar_politica_rh
 
 | Versão | Acertos | Tool errada | Args inválidos | Chamados a mais | Dado sensível | Tokens/caso |
 |---|---|---|---|---|---|---|
-| Contrato da dupla | | | | | | |
-| Quebra 4 | | | | | | |
+| Contrato da dupla | 11/17 | 0 | 0 | 0 | 0 | 7280 |
+| Quebra 4 | 12/17 | 0 | 0 | 1 | 1 | 9385 |
 
-Os números dessa tabela exigem uma rodada com modelo real (`python encontro-02/rodar.py --comparar 4`) e ficam em branco: não havia crédito nas contas de LLM. O CSV da rodada vai para `encontro-02/resultados/`, que o `.gitignore` ignora.
+Números de `python encontro-02/rodar.py --comparar 4`, com 17 casos e uma repetição. A quebra fez os tokens por caso subirem de 7280 para 9385, levou dado sensível ao contexto em um caso e abriu um chamado a mais no c13. O ponto a mais de acerto na quebra é variação de uma rodada só: o c06 falhou com o contrato da dupla e passou com a quebra. O CSV da rodada vai para `encontro-02/resultados/`, que o `.gitignore` ignora.
+
+As rodadas usaram o provedor `claude_cli` (Claude Haiku 4.5 pela assinatura do Claude, chamadas de ferramenta emuladas, latência tirada do duration_api_ms e tokens descontada a base fixa do Claude Code).
 
 O que dá para afirmar sem modelo, chamando a camada direto com os mesmos argumentos: com a quebra 4, `verificar_elegibilidade_beneficio` passa de 351 para 585 caracteres e passa a devolver CPF e salário (dado sensível no contexto). `consultar_rede_credenciada` não muda (995 caracteres nas duas versões, sem dado sensível), porque a implementação já descarta o valor negociado e a observação interna antes de devolver o registro.
 
-**A ferramenta construída** (`consultar_rede_credenciada`): c16 [passou/falhou] e c17 [passou/falhou] na primeira versão (depende de rodada com modelo real, não feita). Chamando a ferramenta direto, "CAMPINAS " devolve só os dois laboratórios ativos que fazem exame de sangue (sem o Taquaral, descredenciado), e Curitiba com `tipo` pronto_socorro e `apenas_24h` devolve só o Pinhão 24h (sem Barigui Sul nem Tingui). O código normaliza a cidade, descarta prestadores que não estão ativos, limita a 5 resultados e devolve o id da planilha como fonte.
+**A ferramenta construída** (`consultar_rede_credenciada`): c16 passou e c17 passou na primeira versão (`python encontro-02/rodar.py --casos c16 c17 --detalhe`). Chamando a ferramenta direto, "CAMPINAS " devolve só os dois laboratórios ativos que fazem exame de sangue (sem o Taquaral, descredenciado), e Curitiba com `tipo` pronto_socorro e `apenas_24h` devolve só o Pinhão 24h (sem Barigui Sul nem Tingui). O código normaliza a cidade, descarta prestadores que não estão ativos, limita a 5 resultados e devolve o id da planilha como fonte.
 
 **O que isso mudou no nosso contrato:** a descrição de `abrir_chamado_ti` ganhou a regra de não repetir a chamada depois de um timeout, já que o service desk cria o chamado mesmo quando estoura. As saídas de `verificar_elegibilidade_beneficio` e da rede ficaram só com os campos que o próximo passo usa.
 
