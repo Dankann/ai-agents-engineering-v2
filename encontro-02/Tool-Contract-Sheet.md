@@ -15,10 +15,12 @@ Uma linha por ferramenta do caso: as seis do hands-on e as que o ADR da equipe e
 | Nome | Quem decide | Descrição | Entrada | Saída | Escopo | Criticidade | Reversível |
 |---|---|---|---|---|---|---|---|
 | `abrir_chamado_ti` *(exemplo)* | Modelo | Cria chamado quando a base de TI não resolve ou o colaborador pede | categoria (enum), descricao (15–500), urgencia (enum) | id, status, prazo | Colaborador autenticado; só TI | Média | Com custo |
-| | | | | | | | |
-| | | | | | | | |
-| | | | | | | | |
-| | | | | | | | |
+| `consultar_politica_rh` | Modelo | Busca nas políticas de RH, com tema opcional | pergunta (até 300), tema (enum de 6) | id, titulo, atualizado_em, trecho | Leitura da wiki de RH | Baixa | Sim |
+| `buscar_base_ti` | Modelo | Busca na base de TI antes de responder ou abrir chamado | pergunta (até 300) | id, titulo, atualizado_em, trecho | Leitura da wiki de TI | Baixa | Sim |
+| `abrir_chamado_ti` | Modelo | Abre chamado quando o colaborador pede ou a base não resolve; não repetir após timeout | categoria (enum), descricao (15 a 500), urgencia (enum) | id, status, categoria, urgencia, prazo_atendimento | Cria chamado no service desk; só TI | Média | Com custo |
+| `consultar_regra_beneficio` | Modelo | Regra vigente de um benefício | beneficio (enum de 3), pergunta (até 300) | id, titulo, atualizado_em, trecho | Leitura da wiki de benefícios | Baixa | Sim |
+| `verificar_elegibilidade_beneficio` | Modelo | Pré-análise de um colaborador; só o RH confirma | colaborador_id (até 20), beneficio (enum de 3) | colaborador_id, beneficio, pre_analise, criterios_verificados, aviso | Lê o cadastro de RH; CPF e salário ficam fora da saída | Alta | Sim |
+| `consultar_rede_credenciada` | Modelo | Prestadores ativos da rede por cidade, tipo, especialidade e 24h | cidade (obrigatória), tipo (enum de 4), especialidade, apenas_24h (boolean) | id, prestador, tipo, especialidades, cidade, uf, bairro, telefone, atende_24h | Leitura da planilha da rede; no máximo 5 resultados; valor negociado e observação interna ficam fora | Média | Sim |
 
 **Como preencher cada coluna:**
 
@@ -35,32 +37,40 @@ Uma linha por ferramenta do caso: as seis do hands-on e as que o ADR da equipe e
 
 Para cada ferramenta com **Quem decide = Modelo**: por que essa chamada depende do conteúdo da pergunta e não pode ser um passo fixo?
 
-- [ferramenta]: [justificativa]
+- `consultar_politica_rh`: o tema da pergunta (férias, jornada, trabalho remoto) só aparece no texto do colaborador.
+- `buscar_base_ti`: o assunto da dúvida define se a base de TI responde ou se é caso de chamado.
+- `abrir_chamado_ti`: abrir ou não depende de o colaborador pedir e de a base resolver o problema, e a categoria e a urgência saem do relato.
+- `consultar_regra_beneficio`: qual benefício e qual dúvida só se sabe lendo a pergunta.
+- `verificar_elegibilidade_beneficio`: distinguir "qual é a regra" de "eu tenho direito" depende da frase do colaborador, e o id vem dele.
+- `consultar_rede_credenciada`: cidade, tipo de prestador e necessidade de atendimento 24h vêm da pergunta.
 
 ## 3. Contratos completos
 
 Colem aqui, ou referenciem no repositório, a descrição completa e o schema de cada ferramenta. Para as seis do hands-on, basta apontar `encontro-02/contratos.py` e `encontro-02/nova_ferramenta.py`.
 
+As seis ferramentas estão implementadas: os contratos de `consultar_politica_rh`, `abrir_chamado_ti` e `verificar_elegibilidade_beneficio` em `encontro-02/contratos.py`, e implementação e contrato de `consultar_rede_credenciada` em `encontro-02/nova_ferramenta.py`.
+
 ## 4. Evidência do hands-on
 
-**A quebra da dupla** ([nº e nome da quebra]):
+**A quebra da dupla** (4, Saída verbosa):
 
 | Versão | Acertos | Tool errada | Args inválidos | Chamados a mais | Dado sensível | Tokens/caso |
 |---|---|---|---|---|---|---|
 | Contrato da dupla | | | | | | |
-| Quebra [nº] | | | | | | |
+| Quebra 4 | | | | | | |
 
-CSV: `encontro-02/resultados/[arquivo].csv`
+Os números dessa tabela exigem uma rodada com modelo real (`python encontro-02/rodar.py --comparar 4`) e ficam em branco: não havia crédito nas contas de LLM. O CSV da rodada vai para `encontro-02/resultados/`, que o `.gitignore` ignora.
 
-**A ferramenta construída** (`consultar_rede_credenciada`): c16 [passou/falhou] e c17 [passou/falhou] na primeira versão. O que precisou mudar até passar: [uma ou duas frases]
+O que dá para afirmar sem modelo, chamando a camada direto com os mesmos argumentos: com a quebra 4, `verificar_elegibilidade_beneficio` passa de 351 para 585 caracteres e passa a devolver CPF e salário (dado sensível no contexto). `consultar_rede_credenciada` não muda (995 caracteres nas duas versões, sem dado sensível), porque a implementação já descarta o valor negociado e a observação interna antes de devolver o registro.
 
-**O que isso mudou no nosso contrato:** [uma ou duas frases]
+**A ferramenta construída** (`consultar_rede_credenciada`): c16 [passou/falhou] e c17 [passou/falhou] na primeira versão (depende de rodada com modelo real, não feita). Chamando a ferramenta direto, "CAMPINAS " devolve só os dois laboratórios ativos que fazem exame de sangue (sem o Taquaral, descredenciado), e Curitiba com `tipo` pronto_socorro e `apenas_24h` devolve só o Pinhão 24h (sem Barigui Sul nem Tingui). O código normaliza a cidade, descarta prestadores que não estão ativos, limita a 5 resultados e devolve o id da planilha como fonte.
+
+**O que isso mudou no nosso contrato:** a descrição de `abrir_chamado_ti` ganhou a regra de não repetir a chamada depois de um timeout, já que o service desk cria o chamado mesmo quando estoura. As saídas de `verificar_elegibilidade_beneficio` e da rede ficaram só com os campos que o próximo passo usa.
 
 ## 5. A ação irreversível do ADR
 
-A ação irreversível definida no ADR do Encontro 1 é: [ação].
+A ação irreversível definida no ADR do Encontro 1 é: confirmar a elegibilidade de um colaborador a um benefício.
 
-- Ela aparece na linha: [ferramenta], com Reversível = `Não`.
-- Ou: ela **não** é executada por nenhuma ferramenta do sistema, porque [motivo].
+- Ela **não** é executada por nenhuma ferramenta do sistema: `verificar_elegibilidade_beneficio` só faz pré-análise (Reversível = `Sim`) e a confirmação fica com o RH.
 
 > No Encontro 6, a coluna Reversível vira o eixo de impacto da matriz autonomia × impacto.

@@ -81,17 +81,82 @@ def normalizar(texto: str) -> str:
 #   3. filtrar (normalizar() ajuda)
 #   4. devolver {"resultados": [...], ...}
 # ======================================================================
-def consultar_rede_credenciada(cidade: str) -> dict:
-    raise NotImplementedError("TODO 4a: implemente consultar_rede_credenciada em nova_ferramenta.py")
+TIPOS = {"hospital": "hospital", "laboratorio": "laboratorio", "clinica": "clinica",
+         "pronto_socorro": "pronto-socorro"}
+MAXIMO = 5
+
+
+def _linhas_como_dicts() -> list:
+    cabecalho, *linhas = SHEETS.ler(PLANILHA_ID, ABA)["values"]
+    return [dict(zip(cabecalho, linha + [""] * (len(cabecalho) - len(linha)))) for linha in linhas]
+
+
+def consultar_rede_credenciada(cidade: str, tipo: str | None = None, especialidade: str | None = None,
+                               apenas_24h: bool = False) -> dict:
+    """Prestadores ATIVOS da rede na cidade, filtrados por tipo, especialidade e atendimento 24h."""
+    if tipo is not None and tipo not in TIPOS:
+        raise ErroDeFerramenta("tipo_invalido", "'tipo' não é um valor aceito.", recebido=tipo,
+                               aceitos=list(TIPOS), como_corrigir="repita com um dos tipos aceitos ou sem tipo")
+    linhas = _linhas_como_dicts()
+    na_cidade = [l for l in linhas if normalizar(l["cidade"]) == normalizar(cidade)]
+    if not na_cidade:
+        grafias = {}
+        for l in linhas:
+            if normalizar(l["situacao"]) == "ativo":
+                grafias.setdefault(normalizar(l["cidade"]), []).append(l["cidade"].strip().title())
+        cidades = sorted(max(v) for v in grafias.values())
+        raise ErroDeFerramenta("cidade_sem_prestador", "A rede não tem prestador nessa cidade.", recebido=cidade,
+                               aceitos=cidades, recuperavel=False,
+                               como_corrigir="diga ao colaborador que a rede não cobre essa cidade")
+
+    achados = [l for l in na_cidade if normalizar(l["situacao"]) == "ativo"]
+    if tipo:
+        achados = [l for l in achados if normalizar(l["tipo"]) == TIPOS[tipo]]
+    if especialidade:
+        achados = [l for l in achados if normalizar(especialidade) in normalizar(l["especialidades"])]
+    if apenas_24h:
+        achados = [l for l in achados if normalizar(l["atende_24h"]) == "sim"]
+
+    resultados = [{
+        "prestador": l["prestador"], "tipo": normalizar(l["tipo"]), "especialidades": l["especialidades"],
+        "cidade": l["cidade"].strip().title(), "uf": l["uf"], "bairro": l["bairro"], "telefone": l["telefone"],
+        "atende_24h": normalizar(l["atende_24h"]) == "sim",
+    } for l in achados[:MAXIMO]]
+    registro = {"id": PLANILHA_ID, "resultados": resultados}
+    if len(achados) > MAXIMO:
+        registro["aviso"] = f"Há {len(achados)} prestadores; mostrando {MAXIMO}. Refine por tipo ou especialidade."
+    return registro
 
 
 # ======================================================================
 # TODO 4b — o contrato (mesmo formato de contratos.py)
 # ======================================================================
 CONTRATO = {
-    "descricao": "TODO 4",
-    "parametros": None,
-    "saida": None,
+    "descricao": (
+        "Consulta a planilha da rede credenciada do plano de saúde da Aurora: hospitais, laboratórios, "
+        "clínicas e prontos-socorros que atendem pelo plano, por cidade. Devolve só prestadores ativos, com "
+        "nome, tipo, especialidades, endereço, telefone e se atende 24 horas. O id devolvido "
+        "(planilha-rede-credenciada) é a fonte a citar. Use quando o colaborador perguntar onde ou se um tipo "
+        "de prestador atende pelo plano. Não use para regras do plano (coparticipação, carência, valores): "
+        "isso é consultar_regra_beneficio. Se a cidade não tiver prestador, a ferramenta devolve as cidades "
+        "atendidas."
+    ),
+    "parametros": {
+        "type": "object",
+        "properties": {
+            "cidade": {"type": "string", "maxLength": 60,
+                       "description": "A cidade do colaborador, como ele escreveu. Ex.: Campinas."},
+            "tipo": {"type": "string", "enum": ["hospital", "laboratorio", "clinica", "pronto_socorro"],
+                     "description": "Filtra pelo tipo de prestador. Omita para todos os tipos."},
+            "especialidade": {"type": "string", "maxLength": 60,
+                              "description": "Filtra por especialidade ou exame. Ex.: pediatria, exames de sangue."},
+            "apenas_24h": {"type": "boolean",
+                           "description": "true para só prestadores que atendem 24 horas. Padrão: false."},
+        },
+        "required": ["cidade"],
+        "additionalProperties": False,
+    },
+    "saida": ["id", "prestador", "tipo", "especialidades", "cidade", "uf", "bairro", "telefone", "atende_24h"],
 }
 
 

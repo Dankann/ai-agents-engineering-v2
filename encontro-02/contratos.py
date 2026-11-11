@@ -79,9 +79,27 @@ CONTRATOS = {
     # Sem o id na saída, o agente consegue citar a fonte?
     # ==================================================================
     "consultar_politica_rh": {
-        "descricao": "TODO 1",
-        "parametros": None,
-        "saida": None,
+        "descricao": (
+            "Busca nas políticas de RH da Aurora: férias, trabalho remoto, licenças, jornada e banco de horas, "
+            "guia de integração. Devolve até 2 páginas, com o id da página (para citar como fonte) e o trecho "
+            "relevante. Use para dúvidas de RH. Se souber o tema, informe-o para restringir a busca; sem tema, "
+            "a busca cobre todas as políticas. Não use para TI (senha, VPN, equipamentos) nem para benefícios "
+            "como vale-refeição, plano de saúde e auxílio-creche: esses têm ferramentas próprias."
+        ),
+        "parametros": {
+            "type": "object",
+            "properties": {
+                "pergunta": {"type": "string", "maxLength": 300,
+                             "description": "A dúvida do colaborador, em português, com as palavras-chave do assunto."},
+                "tema": {"type": "string",
+                         "enum": ["ferias", "trabalho_remoto", "licencas", "jornada", "integracao", "geral"],
+                         "description": "A política a consultar. 'integracao' é o guia de boas-vindas; "
+                                        "'geral' (padrão) busca em todas."},
+            },
+            "required": ["pergunta"],
+            "additionalProperties": False,
+        },
+        "saida": ["id", "titulo", "atualizado_em", "trecho"],
     },
 
     # ==================================================================
@@ -99,9 +117,30 @@ CONTRATOS = {
     # precisa saber do chamado aberto?
     # ==================================================================
     "abrir_chamado_ti": {
-        "descricao": "TODO 2",
-        "parametros": None,
-        "saida": None,
+        "descricao": (
+            "Abre um chamado no service desk de TI. É uma ESCRITA: cada chamada cria um chamado novo. "
+            "Use só quando o colaborador pedir um chamado, ou quando a base de TI não resolver o problema e "
+            "ele precisar de atendimento da equipe (equipamento quebrado, acesso perdido). Consulte buscar_base_ti "
+            "antes. Não use para dúvidas que a base de TI responde, nem para perguntar se precisa de chamado. "
+            "O service desk está lento e pode dar timeout, mas o chamado pode ter sido criado: se der erro de "
+            "timeout, não chame de novo; diga ao colaborador que o pedido foi enviado e que a TI confirma. "
+            "Devolve o id, o status e o prazo de atendimento, para informar ao colaborador."
+        ),
+        "parametros": {
+            "type": "object",
+            "properties": {
+                "categoria": {"type": "string", "enum": ["equipamento", "acesso", "software", "vpn", "outro"],
+                              "description": "O tipo do problema. Perda de segundo fator ou conta bloqueada é 'acesso'."},
+                "descricao": {"type": "string", "minLength": 15, "maxLength": 500,
+                              "description": "O problema relatado pelo colaborador, com o que ele já tentou."},
+                "urgencia": {"type": "string", "enum": ["baixa", "media", "alta"],
+                             "description": "Use 'alta' só quando o colaborador está impedido de trabalhar. "
+                                            "Padrão: 'media'."},
+            },
+            "required": ["categoria", "descricao"],
+            "additionalProperties": False,
+        },
+        "saida": ["id", "status", "categoria", "urgencia", "prazo_atendimento"],
     },
 
     # ==================================================================
@@ -119,9 +158,26 @@ CONTRATOS = {
     # Em que se diferencia de consultar_regra_beneficio?
     # ==================================================================
     "verificar_elegibilidade_beneficio": {
-        "descricao": "TODO 3",
-        "parametros": None,
-        "saida": None,
+        "descricao": (
+            "Faz a pré-análise automática de um colaborador específico para um benefício, a partir do "
+            "cadastro dele no sistema de RH. Só use quando o colaborador informar o próprio id e perguntar se "
+            "tem direito. A pré-análise não confirma elegibilidade: só o RH confirma, depois de analisar a "
+            "documentação. Por isso, depois de usá-la, encaminhe o colaborador ao RH em vez de afirmar que ele "
+            "tem ou não o direito. Nunca tente adivinhar o id. Para dúvidas gerais sobre a regra do benefício, "
+            "use consultar_regra_beneficio."
+        ),
+        "parametros": {
+            "type": "object",
+            "properties": {
+                "colaborador_id": {"type": "string", "maxLength": 20,
+                                   "description": "O id do colaborador, como ele informou. Ex.: \"1043\"."},
+                "beneficio": {"type": "string", "enum": ["vale_refeicao", "plano_de_saude", "auxilio_creche"],
+                              "description": "O benefício a verificar."},
+            },
+            "required": ["colaborador_id", "beneficio"],
+            "additionalProperties": False,
+        },
+        "saida": ["colaborador_id", "beneficio", "pre_analise", "criterios_verificados", "aviso"],
     },
 }
 
