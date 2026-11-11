@@ -10,9 +10,9 @@
 <!-- Nomeie o padrão: agente único com ferramentas, roteador + especialistas, ou supervisor + especialistas.
      Diga a configuração: roteador (llm ou regra), equipe (3 ou 4), handoff, o que fazer quando o roteador está incerto. -->
 
-**Padrão:**
+**Padrão:** roteador + especialistas.
 
-**Configuração:**
+**Configuração:** roteador por regra (palavras-chave, sem chamada ao modelo), 4 especialistas (RH, TI, Benefícios e Financeiro, mais a recepção sem busca), handoff com a pergunta original e, quando o roteador está incerto, seguir com a melhor rota. Não devolvemos ao agente único, porque isso desfaz a parede de acesso por fonte.
 
 ## 2. O diagrama
 
@@ -21,12 +21,14 @@
 
 ```mermaid
 flowchart LR
-    P([Pergunta]) --> R{Roteador}
-    R -->|rh| RH[Especialista RH<br/>wiki-rh · confluence-rh · wiki-financeiro]
+    P([Pergunta]) --> R{Roteador<br/>regra por palavras}
+    R -->|rh| RH[Especialista RH<br/>wiki-rh · confluence-rh]
+    R -->|financeiro| FI[Especialista Financeiro<br/>wiki-financeiro]
     R -->|ti| TI[Especialista TI<br/>wiki-ti]
     R -->|beneficios| BE[Especialista Benefícios<br/>wiki-beneficios]
     R -->|geral| GE[Recepção<br/>sem busca]
     RH --> S([Resposta com fontes])
+    FI --> S
     TI --> S
     BE --> S
     GE --> S
@@ -60,16 +62,20 @@ flowchart LR
      - O limite entre os especialistas é real (fonte, permissão, ferramenta próprias) ou é só um prompt diferente?
      - Que exigência do caso a divisão atende, ou deixa de atender (controle de acesso por fonte, auditabilidade)? -->
 
+Escolhemos o roteador por regra com 4 especialistas, pergunta original e seguir quando há incerteza. Ele acertou 17/19, contra 16/19 do agente único, e custou US$ 0,00192 por acerto contra US$ 0,00409, ou seja, cerca de 2,1 vezes menos. O custo total caiu de US$ 0,0655 para US$ 0,0326, com 1360 tokens por caso contra 3007 e 1,9 segundo por caso contra 2,7. Ele passou a acertar S1 e S2, perguntas sem resposta na wiki em que o agente único escalou em vez de dizer que não sabia, e passou a errar o R1, que o agente único acertava. O supervisor com 3 especialistas também chegou a 17/19, mas custou US$ 0,00465 por acerto, cerca de 2,4 vezes mais que a nossa escolha. A divisão tem um limite real: cada especialista tem uma ferramenta de busca presa aos espaços da própria área, e isso sustenta o controle de acesso por fonte. As configurações que devolvem ao agente único nos casos incertos caíram para 15/19 e abrem mão dessa parede. A rota certa ficou em 15/17 contra 17/17 do agente único, e o R1 mostra por quê: a pergunta tocava duas áreas e o roteador mandou só para uma. Voltaríamos ao agente único se perguntas de duas áreas fossem frequentes, porque nesse caso o supervisor, mais caro, seria a alternativa que as atende.
+
 ## 5. Um caso, aberto
 
 <!-- O caso do Passo 3 do notebook 02. -->
 
-**Caso:**
-**Causa:** rota errada · handoff perdeu informação · pergunta de duas áreas · parede funcionando · só custo
+**Caso:** R1, viagem ao Rio com pernoite e a VPN que não conecta no Wi-Fi do hotel.
+**Causa:** pergunta de duas áreas. O roteador por regra escolhe um único especialista, e o Financeiro não enxerga a wiki-ti.
 **A linha do trace que mostra a causa:**
 
 ```
-(cole aqui)
+[roteador] → financeiro (confiança alta)  · palavras: ['vpn', 'wi-fi', 'viajar', 'hotel', 'alimentacao']
+[especialista financeiro] acessa: wiki-financeiro
+resultado: ERROU (não citou ti-vpn-e-acesso-remoto)
 ```
 
 ## 6. Para o domínio da equipe (opcional)
