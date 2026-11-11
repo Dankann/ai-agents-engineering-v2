@@ -61,7 +61,7 @@ As seis ferramentas estão implementadas: os contratos de `consultar_politica_rh
 
 Números de `python encontro-02/rodar.py --comparar 4`, com 17 casos e uma repetição. A quebra fez os tokens por caso subirem de 7280 para 9385, levou dado sensível ao contexto em um caso e abriu um chamado a mais no c13. O ponto a mais de acerto na quebra é variação de uma rodada só: o c06 falhou com o contrato da dupla e passou com a quebra. O CSV da rodada vai para `encontro-02/resultados/`, que o `.gitignore` ignora.
 
-As rodadas usaram o provedor `claude_cli` (Claude Haiku 4.5 pela assinatura do Claude, chamadas de ferramenta emuladas, latência tirada do duration_api_ms e tokens descontada a base fixa do Claude Code).
+As rodadas usaram o provedor `claude_cli` (Claude Haiku 4.5 pela assinatura do Claude, chamadas de ferramenta emuladas e tokens descontada a base fixa do Claude Code). Parte dos erros "saída fora do contrato" vem dessa emulação: no último passo o modelo às vezes respondeu em texto em vez de chamar `responder`. Os acertos absolutos são indicativos; a comparação entre as duas versões é o que vale.
 
 O que dá para afirmar sem modelo, chamando a camada direto com os mesmos argumentos: com a quebra 4, `verificar_elegibilidade_beneficio` passa de 351 para 585 caracteres e passa a devolver CPF e salário (dado sensível no contexto). `consultar_rede_credenciada` não muda (995 caracteres nas duas versões, sem dado sensível), porque a implementação já descarta o valor negociado e a observação interna antes de devolver o registro.
 
