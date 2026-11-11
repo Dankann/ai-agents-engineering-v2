@@ -14,6 +14,13 @@ Provedores disponíveis (variável PROVEDOR no .env):
     openai_compat  qualquer API compatível com a da OpenAI: OpenRouter, Gemini, OpenAI.
                    Precisa de BASE_URL e API_KEY. No OpenRouter, o mesmo endpoint serve
                    Claude, GPT, Qwen, DeepSeek...: troca-se só a variável MODELO.
+    claude_cli     o executável claude (Claude Code) em modo -p, pela assinatura do Claude, sem chave
+                   de API. As ferramentas são emuladas: a lista vai no prompt de sistema, e o pedido
+                   do modelo é lido do tool_use que ele tenta fazer ou do formato {texto, chamadas}
+                   do --json-schema. Os args não são validados pelo provedor. Não há max_tokens
+                   nem temperatura.
+                   O tempo é o duration_api_ms do CLI. Os tokens de entrada descontam a base fixa que
+                   o Claude Code acrescenta a toda chamada, medida uma vez por processo.
     fake           respostas simuladas, sem custo. Serve só para testar a instalação.
 
 O histórico da conversa fica sempre no formato da Anthropic (blocos tool_use e
@@ -36,11 +43,16 @@ Amostras (a partir do Encontro 5)
                  de amostra, que entra na impressão digital da chamada. amostra(0), o
                  padrão, deixa a impressão digital igual à dos Encontros 1 a 4.
 """
+import atexit
 import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -141,6 +153,8 @@ def tem_credencial() -> bool:
         return os.getenv("ANTHROPIC_API_KEY", "").strip().startswith("sk-")
     if PROVEDOR == "openai_compat":
         return bool(os.getenv("BASE_URL", "").strip() and os.getenv("API_KEY", "").strip())
+    if PROVEDOR == "claude_cli":
+        return shutil.which("claude") is not None
     return PROVEDOR == "fake"
 
 
@@ -149,9 +163,12 @@ def _chamar_provedor(mensagens, sistema, ferramentas, max_tokens, exigir_ferrame
         return _chamar_anthropic(mensagens, sistema, ferramentas, max_tokens, exigir_ferramenta)
     if PROVEDOR == "openai_compat":
         return _chamar_openai_compat(mensagens, sistema, ferramentas, max_tokens, exigir_ferramenta)
+    if PROVEDOR == "claude_cli":
+        return _chamar_claude_cli(mensagens, sistema, ferramentas, exigir_ferramenta)
     if PROVEDOR == "fake":
         return _chamar_fake(mensagens, sistema, ferramentas, exigir_ferramenta)
-    raise ValueError(f"PROVEDOR desconhecido no .env: '{PROVEDOR}'. Use 'anthropic', 'openai_compat' ou 'fake'.")
+    raise ValueError(f"PROVEDOR desconhecido no .env: '{PROVEDOR}'. "
+                     "Use 'anthropic', 'openai_compat', 'claude_cli' ou 'fake'.")
 
 
 # ---------------------------------------------------------------- replay
@@ -408,6 +425,203 @@ def _chamar_openai_compat(mensagens, sistema, ferramentas, max_tokens, exigir_fe
     uso = dados.get("usage") or {}
     medidor.registrar(uso.get("prompt_tokens", 0), uso.get("completion_tokens", 0), time.perf_counter() - inicio)
     return _de_openai(dados)
+
+
+# ---------------------------------------------------------------- claude_cli
+
+_CLI_FLAGS = ["-p", "--output-format", "stream-json", "--verbose", "--tools", "", "--setting-sources", "",
+              "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--disable-slash-commands",
+              "--no-session-persistence", "--max-turns", "1",
+              "--settings", '{"alwaysThinkingEnabled":false}']
+_cli = {"pasta": None, "base": {}}
+
+
+def _esquema_cli(nomes: list | None = None, exigir_ferramenta: bool | str = False) -> dict:
+    """Formato da resposta com ferramentas, imposto pelo --json-schema do CLI. Os args ficam livres:
+    validar contra o input_schema esconderia os argumentos inválidos que o placar conta."""
+    nome = {"type": "string", "enum": nomes} if nomes else {"type": "string"}
+    if isinstance(exigir_ferramenta, str) and exigir_ferramenta:
+        nome = {"type": "string", "enum": [exigir_ferramenta]}
+    chamadas = {"type": "array", "items": {"type": "object", "properties": {"nome": nome, "args": {"type": "object"}},
+                                           "required": ["nome", "args"]}}
+    if exigir_ferramenta:
+        chamadas["minItems"] = 1
+    return {"type": "object", "properties": {"texto": {"type": "string"}, "chamadas": chamadas},
+            "required": ["texto", "chamadas"]}
+
+
+def _rodar_cli(sistema: str, entrada: str, esquema: dict | None = None) -> tuple[dict, list]:
+    """Uma chamada ao claude -p numa pasta vazia, sem CLAUDE.md, MCP, plugins nem skills do usuário.
+
+    Devolve o evento final (uso, tempo) e os blocos da primeira resposta do modelo. O modelo às vezes
+    chama as ferramentas listadas no prompt como tool_use de verdade: o CLI não as conhece e para no
+    limite de um turno, mas o pedido já está nos blocos, e é ele que interessa."""
+    if _cli["pasta"] is None:
+        _cli["pasta"] = tempfile.mkdtemp(prefix="claude_cli_")
+        atexit.register(shutil.rmtree, _cli["pasta"], True)
+    arquivo = Path(_cli["pasta"]) / "sistema.txt"
+    arquivo.write_text(sistema or ".", encoding="utf-8")
+    comando = ["claude", *_CLI_FLAGS, "--model", MODELO, "--system-prompt-file", str(arquivo)]
+    if esquema:
+        comando += ["--json-schema", json.dumps(esquema, ensure_ascii=False)]
+    try:
+        r = subprocess.run(comando, input=entrada, capture_output=True, encoding="utf-8",
+                           cwd=_cli["pasta"], timeout=180)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("claude -p não respondeu em 180 s") from None
+    fim, blocos, respondeu = None, [], False
+    for linha in r.stdout.splitlines():
+        try:
+            evento = json.loads(linha)
+        except json.JSONDecodeError:
+            continue
+        if evento.get("type") == "assistant" and not respondeu:
+            blocos += evento["message"]["content"]
+        elif evento.get("type") == "user":
+            respondeu = True
+        elif evento.get("type") == "result":
+            fim = evento
+    if fim is None:
+        raise RuntimeError(f"claude -p saiu com código {r.returncode}: {(r.stderr or r.stdout).strip()[:500]}")
+    if fim.get("is_error") and not (fim.get("subtype") == "error_max_turns" and blocos):
+        raise RuntimeError(f"claude -p falhou ({fim.get('subtype')}): {str(fim.get('result'))[:500]}")
+    return fim, blocos
+
+
+def _tokens_entrada(fim: dict) -> int:
+    uso = fim.get("usage") or {}
+    return sum(uso.get(k) or 0 for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+
+
+def _base_cli(com_esquema: bool) -> int:
+    """Tokens que o Claude Code põe em toda chamada (identidade, ambiente e, com ferramentas, a definição
+    do formato estruturado), medidos uma vez com um prompt trivial."""
+    if com_esquema not in _cli["base"]:
+        fim, _ = _rodar_cli(".", ".", _esquema_cli() if com_esquema else None)
+        _cli["base"][com_esquema] = _tokens_entrada(fim)
+    return _cli["base"][com_esquema]
+
+
+def _transcricao(mensagens: list) -> str:
+    """Histórico no formato da Anthropic -> texto corrido, que o CLI recebe como uma única mensagem."""
+    if len(mensagens) == 1 and isinstance(mensagens[0]["content"], str):
+        return mensagens[0]["content"]
+    nomes = {b["id"]: b["name"] for m in mensagens if isinstance(m["content"], list)
+             for b in m["content"] if b.get("type") == "tool_use"}
+    partes = []
+    for m in mensagens:
+        quem = "usuário" if m["role"] == "user" else "assistente"
+        if isinstance(m["content"], str):
+            partes.append(f"[{quem}]\n{m['content']}")
+            continue
+        for b in m["content"]:
+            if b.get("type") == "text":
+                partes.append(f"[{quem}]\n{b['text']}")
+            elif b.get("type") == "tool_use":
+                partes.append(f"[assistente chamou a ferramenta {b['name']} (id {b['id']})]\n"
+                              f"{json.dumps(b['input'], ensure_ascii=False)}")
+            elif b.get("type") == "tool_result":
+                conteudo = b["content"]
+                if isinstance(conteudo, list):
+                    conteudo = "".join(c.get("text", "") for c in conteudo)
+                partes.append(f"[resultado da ferramenta {nomes.get(b['tool_use_id'], '?')} "
+                              f"(id {b['tool_use_id']})]\n{conteudo}")
+    partes.append("[assistente]")
+    return "\n\n".join(partes)
+
+
+def _sistema_com_ferramentas(sistema: str, ferramentas: list, exigir_ferramenta) -> str:
+    lista = [{"name": f["nome"], "description": f["descricao"], "input_schema": f["parametros"]}
+             for f in ferramentas]
+    regras = [
+        "# Ferramentas",
+        "Você pode usar as ferramentas abaixo: chame-as pelo nome, com args que seguem o input_schema. "
+        "O sistema executa e o resultado volta na próxima mensagem como [resultado da ferramenta ...]. "
+        "Nunca escreva nem invente esse resultado.",
+        json.dumps(lista, ensure_ascii=False, indent=1),
+    ]
+    if exigir_ferramenta is True:
+        regras.append("Nesta resposta você PRECISA chamar pelo menos uma ferramenta.")
+    elif exigir_ferramenta:
+        regras.append(f"Nesta resposta você PRECISA chamar a ferramenta {exigir_ferramenta}, e só ela.")
+    return (sistema + "\n\n" if sistema else "") + "\n\n".join(regras)
+
+
+def _json_da_resposta(texto: str) -> dict | None:
+    """O objeto JSON mais externo do texto, mesmo com cercas de código ou texto em volta."""
+    limpo = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", texto.strip())
+    for candidato in (limpo, limpo[limpo.find("{"): limpo.rfind("}") + 1]):
+        try:
+            dado = json.loads(candidato)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(dado, dict):
+            return dado
+    return None
+
+
+_TIPOS_JSON = {"array": list, "object": dict, "integer": int, "number": (int, float), "boolean": bool}
+
+
+def _desfazer_strings(args: dict, esquema: dict) -> dict:
+    """O CLI não conhece o schema das ferramentas, e o modelo às vezes manda uma lista ou um número como
+    string ("[\\"a\\"]"). A API devolveria o tipo certo; aqui a string é decodificada quando o schema pede."""
+    saida = dict(args)
+    for nome, regra in (esquema.get("properties") or {}).items():
+        tipo = _TIPOS_JSON.get(regra.get("type"))
+        if tipo and isinstance(saida.get(nome), str):
+            try:
+                valor = json.loads(saida[nome])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(valor, tipo):
+                saida[nome] = valor
+    return saida
+
+
+def _chamar_claude_cli(mensagens, sistema, ferramentas, exigir_ferramenta=False) -> Resposta:
+    esquema = None
+    if ferramentas:
+        sistema = _sistema_com_ferramentas(sistema, ferramentas, exigir_ferramenta)
+        esquema = _esquema_cli([f["nome"] for f in ferramentas], exigir_ferramenta)
+    base = _base_cli(bool(esquema))
+    fim, blocos = _rodar_cli(sistema, _transcricao(mensagens), esquema)
+    medidor.registrar(max(0, _tokens_entrada(fim) - base), (fim.get("usage") or {}).get("output_tokens", 0),
+                      (fim.get("duration_api_ms") or 0) / 1000)
+
+    if not ferramentas:
+        bruto = fim.get("result") or "".join(b.get("text", "") for b in blocos)
+        return Resposta(bruto, [], [{"type": "text", "text": bruto}] if bruto else [])
+
+    textos, pedidas, estruturada = [], [], None
+    for b in blocos:
+        if b.get("type") == "text":
+            textos.append(b["text"])
+        elif b.get("type") == "tool_use" and b.get("name") == "StructuredOutput":
+            estruturada = b.get("input")
+        elif b.get("type") == "tool_use":
+            pedidas.append({"nome": b["name"], "args": b.get("input")})
+    if not isinstance(estruturada, dict) and not pedidas:
+        escrita = _json_da_resposta("".join(textos))
+        if escrita and ("texto" in escrita or "chamadas" in escrita):
+            estruturada, textos = escrita, []
+    if isinstance(estruturada, dict):
+        if isinstance(estruturada.get("texto"), str) and estruturada["texto"].strip():
+            textos = [estruturada["texto"]]
+        pedidas += [c for c in estruturada.get("chamadas") or [] if isinstance(c, dict)]
+
+    texto = "\n".join(t for t in textos if t.strip())
+    esquemas = {f["nome"]: f.get("parametros") or {} for f in ferramentas}
+    chamadas, conteudo = [], [{"type": "text", "text": texto}] if texto else []
+    for c in pedidas:
+        if not isinstance(c.get("nome"), str):
+            continue
+        args = c.get("args") if isinstance(c.get("args"), dict) else {}
+        args = _desfazer_strings(args, esquemas.get(c["nome"], {}))
+        chamada = Chamada(f"cli-{uuid.uuid4().hex[:12]}", c["nome"], args)
+        chamadas.append(chamada)
+        conteudo.append({"type": "tool_use", "id": chamada.id, "name": chamada.nome, "input": chamada.args})
+    return Resposta(texto, chamadas, conteudo)
 
 
 # ---------------------------------------------------------------- fake
